@@ -1,0 +1,512 @@
+library(xlsx)
+library(XLConnect)
+# Declare Twitter API Credentials
+api_key <- "BmOC3DSqY1DnmTumWpT3UYnly"
+api_secret <- "oUBV8UpMN9TMlcDfM3cYIpTZMTil7QEOaZQImb4eEI8VuONAMn"
+token <- "715198199103930369-fLjli3SnM22jkLk3hFT1DPyiKcYHMMz"
+token_secret <- "xtCKxFSLdmijJedTcWwyf0IgUMQyzjPKXZid7Bax4Up4O"
+# Create Twitter Connection
+setup_twitter_oauth(api_key, api_secret, token, token_secret)
+1
+#get data from twitter
+list <- searchTwitter("walmart ", n=5000, since ='2016-04-14', until = '2016-04-15')
+df <- twListToDF(list)
+df <- df[, order(names(df))]
+df$created <- strftime(df$created, '%Y-%m-%d:%H')
+if ( file.exists(paste("goeie", '_stack.xlsx'))==FALSE ) write.xlsx(df, file=paste("goeie ", '_stack.xlsx'),sheetName="goeie ", row.names=F)
+# } else if( existsSheet( wd, "nike")==FALSE) {
+#   write.xlsx(df, file=paste("sentiment", '_stack.xlsx'),sheetName="goeie ", row.names=F, append = TRUE)
+# }
+#mupdate CSV file with new data goeie  duplicates
+stack <- read.xlsx(file=paste("goeie ", '_stack.xlsx'), sheetName="goeie ")
+stack <- rbind(stack, df)
+stack <- subset(stack, !duplicated(stack$text))
+write.xlsx(stack, file=paste("goeie ", '_stack.xlsx'), sheetName="goeie ", row.names=F)
+pos <- scan('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny/positive-words.txt', what='character', comment.char=';') #folder with positive dictionary
+neg <- scan('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny/negative-words.txt', what='character', comment.char=';') #folder with negative dictionary
+Dataset <- stack
+Dataset$text <- as.factor(Dataset$text)
+scores <- score.sentiment(Dataset$text, Dataset$created, pos, neg, .progress='text')
+scores <- group_by(scores, created)
+scores <- aggregate(scores$score, by=list(created=scores$created), FUN=sum)
+write.csv(scores, file=paste("goeie", '_scores.csv'), row.names=TRUE) #save evaluation results
+#my.ts<-ts(scores$total,start=c(2016,4,06,0),freq=24)
+# #total score calculation: positive / negative / neutral
+# stat <- scores
+# stat$created <- stack$created
+# stat$created <- stack$created
+# stat <- mutate(stat, sum(stat$score))
+# #by.tweet <- group_by(stat, tweet, created)
+# by.tweet <- summarise(stat, number=n())
+# #by.tweet1 <- filter(by.tweet,tweet=="positive")
+# #by.tweet2 <- filter(by.tweet,tweet=="negative")
+# #by.tweet = by.tweet1-by.tweet2
+# write.xlsx(by.tweet, file=paste("goeie ", '_opin.xlsx'), sheetName="goeie ", row.names=TRUE)
+#
+#chart
+# ggplot(by.tweet, aes(created, number)) + geom_line(aes(group=tweet, color=tweet), size=1) +
+#   geom_point(aes(group=tweet, color=tweet), size=1) +
+#   theme(text = element_text(size=18), axis.text.x = element_text(angle=90, vjust=1)) +
+#   #stat_summary(fun.y = 'sum', fun.ymin='sum', fun.ymax='sum', colour = 'yellow', size=2, geom = 'line') +
+#   ggtitle("wallmart")
+#tweets evaluation function
+score.sentiment <- function(sentences, time, pos.words, neg.words, .progress='none')
+{
+require(plyr)
+require(stringr)
+scores <- laply(sentences, function(sentence, pos.words, neg.words){
+sentence <- gsub('[[:punct:]]', "", sentence)
+sentence <- gsub('[[:cntrl:]]', "", sentence)
+sentence <- gsub('\\d+', "", sentence)
+sentence <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ", sentence)
+sentence <- gsub("@\\w+", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:punct:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:digit:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("http\\w+", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[ \t]{2,}", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("^\\s+|\\s+$", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:cntrl:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("\\d+", " ", sentence, ignore.case=TRUE)
+word.list <- str_split(sentence, '\\s+')
+words <- unlist(word.list)
+pos.matches <- match(words, pos.words)
+neg.matches <- match(words, neg.words)
+pos.matches <- !is.na(pos.matches)
+neg.matches <- !is.na(neg.matches)
+score <- sum(pos.matches) - sum(neg.matches)
+return(score)
+}, pos.words, neg.words, .progress=.progress)
+scores.df <- data.frame(score=scores, text=sentences, created=time)
+return(scores.df)
+}
+my.ts<-ts(scores$x,start=c(2016,4,06,0),freq=24)
+plot(my.ts)
+acf(my.ts)
+pacf(my.ts)
+install.packages("forecast")
+my.ts<-ts(scores$x,start=c(2016,4,06,0),freq=24)
+plot(my.ts)
+acf(my.ts)
+pacf(my.ts)
+library(twitteR)
+library(ROAuth)
+library(plyr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(xlsx)
+library(XLConnect)
+library(forecast)
+# Declare Twitter API Credentials
+api_key <- "BmOC3DSqY1DnmTumWpT3UYnly"
+api_secret <- "oUBV8UpMN9TMlcDfM3cYIpTZMTil7QEOaZQImb4eEI8VuONAMn"
+token <- "715198199103930369-fLjli3SnM22jkLk3hFT1DPyiKcYHMMz"
+token_secret <- "xtCKxFSLdmijJedTcWwyf0IgUMQyzjPKXZid7Bax4Up4O"
+# Create Twitter Connection
+setup_twitter_oauth(api_key, api_secret, token, token_secret)
+1
+#get data from twitter
+list <- searchTwitter("walmart ", n=5000, since ='2016-04-14', until = '2016-04-15')
+df <- twListToDF(list)
+df <- df[, order(names(df))]
+df$created <- strftime(df$created, '%Y-%m-%d:%H')
+if ( file.exists(paste("forecast", '_stack.xlsx'))==FALSE ) write.xlsx(df, file=paste("forecast ", '_stack.xlsx'),sheetName="forecast ", row.names=F)
+# } else if( existsSheet( wd, "nike")==FALSE) {
+#   write.xlsx(df, file=paste("sentiment", '_stack.xlsx'),sheetName="forecast ", row.names=F, append = TRUE)
+# }
+#mupdate CSV file with new data forecast  duplicates
+stack <- read.xlsx(file=paste("forecast ", '_stack.xlsx'), sheetName="forecast ")
+stack <- rbind(stack, df)
+stack <- subset(stack, !duplicated(stack$text))
+write.xlsx(stack, file=paste("forecast ", '_stack.xlsx'), sheetName="forecast ", row.names=F)
+pos <- scan('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny/positive-words.txt', what='character', comment.char=';') #folder with positive dictionary
+neg <- scan('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny/negative-words.txt', what='character', comment.char=';') #folder with negative dictionary
+Dataset <- stack
+Dataset$text <- as.factor(Dataset$text)
+scores <- score.sentiment(Dataset$text, Dataset$created, pos, neg, .progress='text')
+scores <- group_by(scores, created)
+scores <- aggregate(scores$score, by=list(created=scores$created), FUN=sum)
+write.csv(scores, file=paste("forecast", '_scores.csv'), row.names=TRUE) #save evaluation results
+my.ts<-ts(scores$score,start=c(2016,4,06,0),freq=24)
+plot(my.ts)
+acf(my.ts)
+pacf(my.ts)
+# #total score calculation: positive / negative / neutral
+# stat <- scores
+# stat$created <- stack$created
+# stat$created <- stack$created
+# stat <- mutate(stat, sum(stat$score))
+# #by.tweet <- group_by(stat, tweet, created)
+# by.tweet <- summarise(stat, number=n())
+# #by.tweet1 <- filter(by.tweet,tweet=="positive")
+# #by.tweet2 <- filter(by.tweet,tweet=="negative")
+# #by.tweet = by.tweet1-by.tweet2
+# write.xlsx(by.tweet, file=paste("forecast ", '_opin.xlsx'), sheetName="forecast ", row.names=TRUE)
+#
+#chart
+# ggplot(by.tweet, aes(created, number)) + geom_line(aes(group=tweet, color=tweet), size=1) +
+#   geom_point(aes(group=tweet, color=tweet), size=1) +
+#   theme(text = element_text(size=18), axis.text.x = element_text(angle=90, vjust=1)) +
+#   #stat_summary(fun.y = 'sum', fun.ymin='sum', fun.ymax='sum', colour = 'yellow', size=2, geom = 'line') +
+#   ggtitle("wallmart")
+#tweets evaluation function
+score.sentiment <- function(sentences, time, pos.words, neg.words, .progress='none')
+{
+require(plyr)
+require(stringr)
+scores <- laply(sentences, function(sentence, pos.words, neg.words){
+sentence <- gsub('[[:punct:]]', "", sentence)
+sentence <- gsub('[[:cntrl:]]', "", sentence)
+sentence <- gsub('\\d+', "", sentence)
+sentence <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ", sentence)
+sentence <- gsub("@\\w+", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:punct:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:digit:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("http\\w+", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[ \t]{2,}", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("^\\s+|\\s+$", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:cntrl:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("\\d+", " ", sentence, ignore.case=TRUE)
+word.list <- str_split(sentence, '\\s+')
+words <- unlist(word.list)
+pos.matches <- match(words, pos.words)
+neg.matches <- match(words, neg.words)
+pos.matches <- !is.na(pos.matches)
+neg.matches <- !is.na(neg.matches)
+score <- sum(pos.matches) - sum(neg.matches)
+return(score)
+}, pos.words, neg.words, .progress=.progress)
+scores.df <- data.frame(score=scores, text=sentences, created=time)
+return(scores.df)
+}
+library(twitteR)
+library(ROAuth)
+library(plyr)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(xlsx)
+library(XLConnect)
+library(forecast)
+# Declare Twitter API Credentials
+api_key <- "BmOC3DSqY1DnmTumWpT3UYnly"
+api_secret <- "oUBV8UpMN9TMlcDfM3cYIpTZMTil7QEOaZQImb4eEI8VuONAMn"
+token <- "715198199103930369-fLjli3SnM22jkLk3hFT1DPyiKcYHMMz"
+token_secret <- "xtCKxFSLdmijJedTcWwyf0IgUMQyzjPKXZid7Bax4Up4O"
+# Create Twitter Connection
+setup_twitter_oauth(api_key, api_secret, token, token_secret)
+1
+#get data from twitter
+list <- searchTwitter("walmart", n=5, since ='2016-04-09', until = '2016-04-10')
+df <- twListToDF(list)
+df <- df[, order(names(df))]
+df$created <- strftime(df$created, '%Y-%m-%d:%H')
+if (file.exists(paste("walmart", '_stack.csv'))==FALSE) write.csv(df, file=paste("walmart", '_stack.csv'), row.names=F)
+#update CSV file with new data exclusing duplicates
+stack <- read.csv(file=paste("walmart", '_stack.csv'))
+stack <- rbind(stack, df)
+stack <- subset(stack, !duplicated(stack$text))
+write.csv(stack, file=paste("walmart", '_stack.csv'), row.names=F)
+#initialte positive and negative word list
+pos <- scan('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/lexicon/positive-words.txt', what='character', comment.char=';') #folder with positive dictionary
+neg <- scan('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/lexicon/negative-words.txt', what='character', comment.char=';') #folder with negative dictionary
+Dataset <- stack
+Dataset$text <- as.factor(Dataset$text)
+scores <- score.sentiment(Dataset$text, Dataset$created, pos, neg, .progress='text')
+scores <- group_by(scores, created)
+scores <- aggregate(scores$score, by=list(created=scores$created), FUN=sum)
+write.csv(scores, file=paste("walmart", '_scores.csv'), row.names=TRUE) #save evaluation results
+my.ts<-ts(scores$score,start=c(2016,4,06,0),freq=24)
+plot(my.ts)
+acf(my.ts)
+pacf(my.ts)
+# #total score calculation: positive / negative / neutral
+# stat <- scores
+# stat$created <- stack$created
+# stat$created <- stack$created
+# stat <- mutate(stat, sum(stat$score))
+# #by.tweet <- group_by(stat, tweet, created)
+# by.tweet <- summarise(stat, number=n())
+# #by.tweet1 <- filter(by.tweet,tweet=="positive")
+# #by.tweet2 <- filter(by.tweet,tweet=="negative")
+# #by.tweet = by.tweet1-by.tweet2
+# write.xlsx(by.tweet, file=paste("forecast ", '_opin.xlsx'), sheetName="forecast ", row.names=TRUE)
+#
+#chart
+# ggplot(by.tweet, aes(created, number)) + geom_line(aes(group=tweet, color=tweet), size=1) +
+#   geom_point(aes(group=tweet, color=tweet), size=1) +
+#   theme(text = element_text(size=18), axis.text.x = element_text(angle=90, vjust=1)) +
+#   #stat_summary(fun.y = 'sum', fun.ymin='sum', fun.ymax='sum', colour = 'yellow', size=2, geom = 'line') +
+#   ggtitle("wallmart")
+#tweets evaluation function
+score.sentiment <- function(sentences, time, pos.words, neg.words, .progress='none')
+{
+require(plyr)
+require(stringr)
+scores <- laply(sentences, function(sentence, pos.words, neg.words){
+sentence <- gsub('[[:punct:]]', "", sentence)
+sentence <- gsub('[[:cntrl:]]', "", sentence)
+sentence <- gsub('\\d+', "", sentence)
+sentence <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", " ", sentence)
+sentence <- gsub("@\\w+", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:punct:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:digit:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("http\\w+", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[ \t]{2,}", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("^\\s+|\\s+$", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("[[:cntrl:]]", " ", sentence, ignore.case=TRUE)
+sentence <- gsub("\\d+", " ", sentence, ignore.case=TRUE)
+word.list <- str_split(sentence, '\\s+')
+words <- unlist(word.list)
+pos.matches <- match(words, pos.words)
+neg.matches <- match(words, neg.words)
+pos.matches <- !is.na(pos.matches)
+neg.matches <- !is.na(neg.matches)
+score <- sum(pos.matches) - sum(neg.matches)
+return(score)
+}, pos.words, neg.words, .progress=.progress)
+scores.df <- data.frame(score=scores, text=sentences, created=time)
+return(scores.df)
+}
+my.ts<-ts(scores$x,start=c(2016,4,06,0),freq=24)
+plot(my.ts)
+acf(my.ts)
+pacf(my.ts)
+plot(my.ts)
+acf(my.ts)
+pacf(my.ts)
+my.simple <- ses(             # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+level = 95,     # prediction intervals
+fan = FALSE,          # If TRUE, level is set to seq(50,99,by=1).
+alpha = 0.2,          # Value of smoothing parameter for the level. If NULL, it will be estimated.
+initial = "simple"    # or: "optimal"
+)
+plot(my.simple)
+my.simple$mean
+plot(my.simple$fitted)
+acf(my.simple$residuals)
+my.winters<-hw(               # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+seasonal = "additive",# or: "multiplicative"
+level=c(80,95),       # prediction intervals
+fan=FALSE,            # If TRUE, level is set to seq(50,99,by=1).
+initial = "simple",   # or: "optimal"
+exponential=FALSE,    # If TRUE, an exponential trend is fitted. Otherwise, the trend is linear.
+alpha=NULL            # Value of smoothing parameter for the level. If NULL, it will be estimated.
+)
+my.winters<-hw(               # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+seasonal = "additive",# or: "multiplicative"
+level=c(80,95),       # prediction intervals
+fan=FALSE,            # If TRUE, level is set to seq(50,99,by=1).
+initial = "simple",   # or: "optimal"
+exponential=FALSE,    # If TRUE, an exponential trend is fitted. Otherwise, the trend is linear.
+alpha=NULL            # Value of smoothing parameter for the level. If NULL, it will be estimated.
+)
+my.winters<-hw(               # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+#seasonal = "additive",# or: "multiplicative"
+level=c(80,95),       # prediction intervals
+fan=FALSE,            # If TRUE, level is set to seq(50,99,by=1).
+initial = "simple",   # or: "optimal"
+exponential=FALSE,    # If TRUE, an exponential trend is fitted. Otherwise, the trend is linear.
+alpha=NULL            # Value of smoothing parameter for the level. If NULL, it will be estimated.
+)
+my.winters<-hw(               # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+seasonal = "additive",# or: "multiplicative"
+fan=FALSE,            # If TRUE, level is set to seq(50,99,by=1).
+initial = "simple",   # or: "optimal"
+exponential=FALSE,    # If TRUE, an exponential trend is fitted. Otherwise, the trend is linear.
+alpha=NULL            # Value of smoothing parameter for the level. If NULL, it will be estimated.
+)
+my.arima<-Arima(
+x = my.ts,
+order = c(0,1,0),
+seasonal=c(1,1,0),
+transform.pars=TRUE,
+fixed=NULL,
+init=NULL,
+method=c("CSS-ML","ML","CSS"),
+kappa=1e6)
+my.arima<-Arima(
+x = my.ts,
+order = c(0,1,0),
+seasonal=c(1,1,0),
+transform.pars=TRUE,
+fixed=NULL,
+init=NULL,
+method=c("CSS-ML","ML","CSS"),
+kappa=1e6)
+# plot the forecasting
+plot(forecast(my.arima))
+my.winters<-hw(               # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+seasonal = "additive",# or: "multiplicative"
+level=c(80,95),       # prediction intervals
+fan=FALSE,            # If TRUE, level is set to seq(50,99,by=1).
+initial = "simple",   # or: "optimal"
+exponential=FALSE,    # If TRUE, an exponential trend is fitted. Otherwise, the trend is linear.
+alpha=NULL            # Value of smoothing parameter for the level. If NULL, it will be estimated.
+)
+my.winters<-hw(               # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+seasonal = "additive",# or: "multiplicative"
+level=c(80,95),       # prediction intervals
+fan=FALSE,            # If TRUE, level is set to seq(50,99,by=1).
+initial = "simple",   # or: "optimal"
+exponential=FALSE,    # If TRUE, an exponential trend is fitted. Otherwise, the trend is linear.
+alpha=NULL            # Value of smoothing parameter for the level. If NULL, it will be estimated.
+)
+# plot forecasting
+plot(my.winters)
+my.auto.arima<-auto.arima(
+x = my.ts,
+# difference
+d=NA,
+D=NA,
+# non seasonal
+max.p=5,
+max.q=5,
+# seasonal
+max.P=2,
+max.Q=2,
+max.order=5,     # Maximum value of p+q+P+Q if model selection is not stepwise.
+max.d=2,         # Maximum number of non-seasonal differences
+max.D=1,         # Maximum number of seasonal differences
+start.p=2,
+start.q=2,
+start.P=1,
+start.Q=1,
+stationary=FALSE,
+ic=c("aicc", "aic", "bic"),
+stepwise=TRUE,
+test=c("kpss","adf","pp"),
+seasonal.test=c("ocsb","ch"),
+parallel=FALSE,  # If TRUE and stepwise = FALSE, then the specification search is done in parallel.
+num.cores=2)     # Allows the user to specify the amount of parallel processes
+plot(forecast(my.auto.arima))
+plot(my.auto.arima$residuals)
+acf(my.auto.arima$residuals)
+pacf(my.auto.arima$residuals)
+my.auto.arima<-auto.arima(
+x = my.ts,
+# difference
+d=NA,
+D=NA,
+# non seasonal
+max.p=5,
+max.q=5,
+# seasonal
+max.P=2,
+max.Q=2,
+max.order=5,     # Maximum value of p+q+P+Q if model selection is not stepwise.
+max.d=2,         # Maximum number of non-seasonal differences
+max.D=1,         # Maximum number of seasonal differences
+start.p=2,
+start.q=2,
+start.P=1,
+start.Q=1,
+stationary=FALSE,
+ic=c("aicc", "aic", "bic"),
+stepwise=TRUE,
+test=c("kpss","adf","pp"),
+seasonal.test=c("ocsb","ch"),
+parallel=FALSE,  # If TRUE and stepwise = FALSE, then the specification search is done in parallel.
+num.cores=2)     # Allows the user to specify the amount of parallel processes
+# plot the forecasting
+plot(forecast(my.auto.arima))
+my.simple <- ses(             # package: forecast
+x = my.ts,            # Time series data
+h = 3*24,             # Number of periods for forecasting.
+level = 95,     # prediction intervals
+fan = FALSE,          # If TRUE, level is set to seq(50,99,by=1).
+alpha = 0.2,          # Value of smoothing parameter for the level. If NULL, it will be estimated.
+initial = "simple"    # or: "optimal"
+)
+plot(my.simple)
+my.simple <- ses(             # package: forecast
+x = my.ts,            # Time series data
+h = 3*12,             # Number of periods for forecasting.
+level = 95,     # prediction intervals
+fan = FALSE,          # If TRUE, level is set to seq(50,99,by=1).
+alpha = 0.2,          # Value of smoothing parameter for the level. If NULL, it will be estimated.
+initial = "simple"    # or: "optimal"
+)
+# plot forecasting
+plot(my.simple)
+my.simple <- ses(             # package: forecast
+x = my.ts,            # Time series data
+h = 3,             # Number of periods for forecasting.
+level = 95,     # prediction intervals
+fan = FALSE,          # If TRUE, level is set to seq(50,99,by=1).
+alpha = 0.2,          # Value of smoothing parameter for the level. If NULL, it will be estimated.
+initial = "simple"    # or: "optimal"
+)
+# plot forecasting
+plot(my.simple)
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+install.packages("dygraphs")
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+install.packages("readxl")
+shiny::runApp('C:/Users/sindhu/Downloads/shinyUI_Layoutcode-2016-04-19/shinyUI_Layoutcode')
+shiny::runApp('C:/Users/sindhu/Downloads/shinyUI_Layoutcode-2016-04-19/shinyUI_Layoutcode')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/Downloads/shinyUI_Layoutcode-2016-04-19/shinyUI_Layoutcode')
+shiny::runApp('C:/Users/sindhu/Downloads/shinyUI_Layoutcode-2016-04-19/shinyUI_Layoutcode')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+install.packages("shinyjs")
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
+shiny::runApp('C:/Users/sindhu/OneDrive/Masters/Ms CS Spring 16/Software System Design and Implementation/Project/TermProject/Shiny')
